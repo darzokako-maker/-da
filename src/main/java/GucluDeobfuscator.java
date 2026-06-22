@@ -4,10 +4,9 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 
 import java.io.*;
-import java.util.Enumeration;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 public class GucluDeobfuscator {
 
@@ -20,35 +19,37 @@ public class GucluDeobfuscator {
         File inputFile = new File(args[0]);
         File outputFile = new File(args[1]);
 
-        try (JarFile inputJar = new JarFile(inputFile);
-             JarOutputStream outputJar = new JarOutputStream(new FileOutputStream(outputFile))) {
+        // JarFile yerine ZipInputStream kullanarak bozuk başlık korumasını (END header bypass) geçiyoruz
+        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(inputFile));
+             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(outputFile))) {
 
-            Enumeration<JarEntry> entries = inputJar.entries();
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                
+                // Ham baytları oku
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    bos.write(buffer, 0, len);
+                }
+                byte[] entryBytes = bos.toByteArray();
 
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                try (InputStream entryStream = inputJar.getInputStream(entry)) {
-                    
-                    // Eğer dosya bir Java Sınıfı (.class) ise analiz et
-                    if (entry.getName().endsWith(".class")) {
-                        byte[] classBytes = entryStream.readAllBytes();
-                        
-                        ClassReader reader = new ClassReader(classBytes);
+                // Eğer dosya bir Java Sınıfı (.class) ise ve içi boş değilse analiz et
+                if (entry.getName().endsWith(".class") && entryBytes.length > 0) {
+                    try {
+                        ClassReader reader = new ClassReader(entryBytes);
                         ClassNode classNode = new ClassNode();
                         reader.accept(classNode, 0);
 
-                        // Sınıfın içindeki metotları tara
+                        // Metotları ve şifreli Stringleri tara
                         for (MethodNode method : classNode.methods) {
                             InsnList instructions = method.instructions;
                             for (AbstractInsnNode insn : instructions.toArray()) {
-                                
-                                // Şifreli String yüklemelerini (LDC) yakala
                                 if (insn.getOpcode() == Opcodes.LDC) {
                                     LdcInsnNode ldc = (LdcInsnNode) insn;
                                     if (ldc.cst instanceof String) {
                                         String encrypted = (String) ldc.cst;
-                                        
-                                        // Şifreyi Çöz ve Değiştir
                                         String decrypted = decryptString(encrypted);
                                         ldc.cst = decrypted;
                                     }
@@ -56,34 +57,34 @@ public class GucluDeobfuscator {
                             }
                         }
 
-                        // Değiştirilmiş sınıfı yeni jar'a yaz
+                        // Yeniden derle ve yaz
                         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
                         classNode.accept(writer);
-                        outputJar.putNextEntry(new JarEntry(entry.getName()));
-                        outputJar.write(writer.toByteArray());
-                        outputJar.closeEntry();
-
-                    } else {
-                        // Resim, ses vb. diğer dosyaları değiştirmeden direkt kopyala
-                        outputJar.putNextEntry(new JarEntry(entry.getName()));
-                        outputJar.write(entryStream.readAllBytes());
-                        outputJar.closeEntry();
+                        entryBytes = writer.toByteArray();
+                    } catch (Exception e) {
+                        // Sınıf okunurken hata alınırsa dosyayı bozmamak için orijinal halini bırak
+                        System.out.println("[-] Sinif okunurken atlandi: " + entry.getName());
                     }
                 }
+
+                // Sonucu yeni arşive ekle
+                ZipEntry newEntry = new ZipEntry(entry.getName());
+                zos.putNextEntry(newEntry);
+                zos.write(entryBytes);
+                zos.closeEntry();
+                zis.closeEntry();
             }
-            System.out.println("[BAŞARILI] Şifreler çözüldü ve yeni temiz dosya oluşturuldu!");
+            System.out.println("[BAŞARILI] Bozuk arşiv koruması geçildi, şifreler çözüldü!");
 
         } catch (Exception e) {
-            System.out.println("[HATA] İşlem sırasında bir sorun oluştu: " + e.getMessage());
+            System.out.println("[HATA] Pipeline akis hatasi: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    // Basit XOR/Karakter Kaydırma Çözücü Altyapısı
-    // (Oyunun güncel şifreleme tekniğine göre burayı ileride modifiye edebilirsin)
     private static String decryptString(String input) {
         if (input == null || input.isEmpty()) return input;
-        char[] key = {'S', 'O', 'C'}; // Örnek anahtar
+        char[] key = {'S', 'O', 'C'}; 
         StringBuilder output = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
             output.append((char) (input.charAt(i) ^ key[i % key.length]));
@@ -91,4 +92,3 @@ public class GucluDeobfuscator {
         return output.toString();
     }
 }
-
