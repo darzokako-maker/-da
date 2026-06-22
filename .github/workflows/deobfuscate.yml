@@ -1,7 +1,7 @@
 name: SonOyuncu Canlı Deobfuscator Pipeline
 
 on:
-  workflow_dispatch: # Manuel olarak butona basıp başlatabilmen için
+  workflow_dispatch: # Manuel olarak butona basıp başlatabilmen için gerekli tetikleyici
 
 jobs:
   build_and_analyze:
@@ -25,7 +25,6 @@ jobs:
 
     - name: SonOyuncu Istemcisini Indir
       run: |
-        # Not: Oyunun indirme linki değiştikçe bu URL güncellenmelidir.
         curl -L "https://sonoyuncu.network/download/SonOyuncuClient.jar" -o workspace/input/SonOyuncuClient.jar
 
     - name: Analiz Aracini Derle (Build)
@@ -33,14 +32,11 @@ jobs:
 
     - name: Sifreleri ve Kodlari Coz (Deobfuscate)
       run: |
-        # Derlenen JAR dosyamızı indirilen oyun dosyası üzerinde çalıştırıyoruz
         java -jar target/GucluDeobfuscator-1.0-SNAPSHOT-jar-with-dependencies.jar workspace/input/SonOyuncuClient.jar workspace/output/DeobfuscatedClient.jar
 
     - name: Kodu Okunabilir Java'ya Cevir (Decompile)
       run: |
-        # Profesyonel decompiler aracı olan Vineflower'ı indiriyoruz
         wget https://github.com/Vineflower/vineflower/releases/download/1.10.1/vineflower-1.10.1.jar -O decompiler.jar
-        # Şifresi çözülmüş bytecode'u saf .java kodlarına dönüştürüp sources klasörüne atıyoruz
         java -jar decompiler.jar workspace/output/DeobfuscatedClient.jar workspace/output/sources/
 
     - name: Temiz Kodlari Yukle (Artifact)
