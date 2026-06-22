@@ -1,7 +1,7 @@
 name: SonOyuncu Canlı Deobfuscator Pipeline
 
 on:
-  workflow_dispatch: # Manuel olarak butona basıp başlatabilmen için gerekli tetikleyici
+  workflow_dispatch:
 
 jobs:
   build_and_analyze:
@@ -22,10 +22,8 @@ jobs:
       run: |
         mkdir -p workspace/input
         mkdir -p workspace/output
-
-    - name: SonOyuncu Istemcisini Indir
-      run: |
-        curl -L "https://sonoyuncu.network/download/SonOyuncuClient.jar" -o workspace/input/SonOyuncuClient.jar
+        # Depoya yüklediğin orijinal istemciyi işlem klasörüne taşıyoruz
+        cp SonOyuncuClient.jar workspace/input/SonOyuncuClient.jar
 
     - name: Analiz Aracini Derle (Build)
       run: mvn clean package
