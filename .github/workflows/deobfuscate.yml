@@ -1,0 +1,52 @@
+name: SonOyuncu Canlı Deobfuscator Pipeline
+
+on:
+  workflow_dispatch: # Manuel olarak butona basıp başlatabilmen için
+
+jobs:
+  build_and_analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Depoyu Klonla
+      uses: actions/checkout@v4
+
+    - name: Java JDK 17 Kur
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Calisma Klasorlerini Olustur
+      run: |
+        mkdir -p workspace/input
+        mkdir -p workspace/output
+
+    - name: SonOyuncu Istemcisini Indir
+      run: |
+        # Not: Oyunun indirme linki değiştikçe bu URL güncellenmelidir.
+        curl -L "https://sonoyuncu.network/download/SonOyuncuClient.jar" -o workspace/input/SonOyuncuClient.jar
+
+    - name: Analiz Aracini Derle (Build)
+      run: mvn clean package
+
+    - name: Sifreleri ve Kodlari Coz (Deobfuscate)
+      run: |
+        # Derlenen JAR dosyamızı indirilen oyun dosyası üzerinde çalıştırıyoruz
+        java -jar target/GucluDeobfuscator-1.0-SNAPSHOT-jar-with-dependencies.jar workspace/input/SonOyuncuClient.jar workspace/output/DeobfuscatedClient.jar
+
+    - name: Kodu Okunabilir Java'ya Cevir (Decompile)
+      run: |
+        # Profesyonel decompiler aracı olan Vineflower'ı indiriyoruz
+        wget https://github.com/Vineflower/vineflower/releases/download/1.10.1/vineflower-1.10.1.jar -O decompiler.jar
+        # Şifresi çözülmüş bytecode'u saf .java kodlarına dönüştürüp sources klasörüne atıyoruz
+        java -jar decompiler.jar workspace/output/DeobfuscatedClient.jar workspace/output/sources/
+
+    - name: Temiz Kodlari Yukle (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Temiz-SonOyuncu-Kaynak-Kodlari
+        path: workspace/output/sources/
+        retention-days: 3
+        
